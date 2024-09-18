@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include <tchar.h>
+#include <vector>
 
 // DirectXやDSGIを制御するために必要なヘッダーのインクルード
 #include <d3d12.h>
@@ -41,19 +42,9 @@ LRESULT WindowProcedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	return DefWindowProc(hwnd, msg, wparam, lparam);	// 既定の処理を行う
 }
 
-#ifdef _DEBUG
-int main()
+// ウィンドウ作成
+void MakeWindow(WNDCLASSEX& w)
 {
-#else
-int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
-{
-#endif
-
-	/////////////////*ウィンドウ表示の定型文*/////////////////////////////////////////////
-
-	// ウィンドウクラスの生成＆登録
-	WNDCLASSEX w = {};
-
 	w.cbSize = sizeof(WNDCLASSEX);
 	w.lpfnWndProc = (WNDPROC)WindowProcedure;	// コールバック関数の指定
 	w.lpszClassName = _T("DX12Sample");			// アプリケーションクラス名（適当でよい）
@@ -85,8 +76,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// ウィンドウ表示
 	ShowWindow(hwnd, SW_SHOW);
+}
 
-	/////////////////////////////////////////////////////////////////////////////////////////
+#ifdef _DEBUG
+int main()
+{
+#else
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
+{
+#endif
+
+	// ウィンドウクラスの生成＆登録
+	WNDCLASSEX w = {};
+
+	// ウィンドウ作成
+	MakeWindow(w);
+
+	// DirectXの初期化
+
 
 	/*DirectX基本部分の初期化*/
 
@@ -94,6 +101,45 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	ID3D12Device* _dev = nullptr;
 	IDXGIFactory6* _dxgiFactory = nullptr;
 	IDXGISwapChain4* _swapchain = nullptr;
+
+	// コマンドリストとコマンドアロケーターの宣言
+	ID3D12CommandAllocator* _cmdAllocator = nullptr;
+	ID3D12GraphicsCommandList* _cmdList = nullptr;
+
+	// グラフィックスボードが複数刺さっている場合の処理
+
+	// DXGIFactoryオブジェクトを生成する
+	auto result = CreateDXGIFactory1(IID_PPV_ARGS(&_dxgiFactory));	// DXGIFactoryが_dxgiFactoryに入る
+
+	// アダプターの列挙用
+	std::vector <IDXGIAdapter*> adapters;
+
+	// ここに特定の名前を持つアダプターオブジェクトが入る
+	IDXGIAdapter* tempAdapter = nullptr;
+
+	// アダプターを配列に保存していく
+	for (int i = 0;
+		_dxgiFactory->EnumAdapters(i, &tempAdapter) != DXGI_ERROR_NOT_FOUND;
+		++i)
+	{
+		adapters.push_back(tempAdapter);
+	}
+
+	// 特定のアダプターを探し出す
+	for (auto adpt : adapters)
+	{
+		DXGI_ADAPTER_DESC adesc = {};
+		adpt->GetDesc(&adesc);	// アダプターの説明オブジェクトを取得
+
+		std::wstring strDesc = adesc.Description;	// アダプターの名前を取得
+
+		// 探したいアダプターの名前を確認
+		if (strDesc.find(L"NVIDIA") != std::string::npos)	// このコードはNVIDIAを使っているから（配布や他のPCだとあまりよくない）
+		{
+			tempAdapter = adpt;
+			break;
+		}
+	}
 
 	// フィーチャーレベル構造体
 	D3D_FEATURE_LEVEL levels[] =
@@ -109,14 +155,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	D3D_FEATURE_LEVEL featurelevel;
 
 	// 使用できるバージョンを見つけてデバイスオブジェクトを生成する
-	for (auto lv : levels) 
+	for (auto lv : levels)
 	{
-		if (D3D12CreateDevice(nullptr, lv, IID_PPV_ARGS(&_dev)) == S_OK) 
+		if (D3D12CreateDevice(tempAdapter, lv, IID_PPV_ARGS(&_dev)) == S_OK)
 		{
 			featurelevel == lv;
 			break;	// 生成可能なバージョンが見つかったらループを打ち切り
 		}
 	}
+
+	
+
 
 	MSG msg = {};
 	// アプリケーションが終了しないための無限ループ
@@ -135,15 +184,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		}
 	}
 
-	// グラフィックスボードが複数刺さっている場合の処理
-
-	// DXGIFactoryオブジェクトを生成する
-	auto result = CreateDXGIFactory1(IID_PPV_ARGS(&_dxgiFactory));	// DXGIFactoryが_dxgiFactoryに入る
-
-
-
-
-
+	
 
 
 
